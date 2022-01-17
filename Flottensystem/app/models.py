@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import datetime, timedelta
 from hashlib import md5
 from app import db, login
 from flask_login import UserMixin
@@ -6,6 +6,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.ext.declarative import AbstractConcreteBase
 from sqlalchemy.orm import configure_mappers
 from flask import url_for
+import base64
+import os
 
 
 ''' Anmerkung: Bei der Beschreibung des Codes wurde darauf beachtet, den Code möglichst wenig doppelt zu beschreiben. '''
@@ -77,6 +79,13 @@ class Mitarbeiter(UserMixin, db.Model, AbstractConcreteBase):
     nachname = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), index=True, unique=True, nullable=False)
     passwort = db.Column(db.String(128), nullable=False)
+    ''' Die nachfolgenden Felder werden generiert, damit der User ein Token zugewiesen bekommen kann. Diser Token 
+        wird für die Authentifizierung in der API benötigt, da ein Client (wenn dieser mit der API interagieren will)
+        sich bei der API mittels einem Token authentifizieren muss. Dieser Token steht dem User nur temporär zur 
+        Verfügung, wobei "tokenDauer" die Zeit angibt, in der das Token gültig ist (bzw. gibt es an, wann die 
+        Gültigkeit des Tokens verfällt) '''
+    token = db.Column(db.String(32), index=True, unique=True)
+    tokenDauer = db.Column(db.DateTime)
 
     ''' Die Methode "__repr__" dient dazu, um zu bestimmen, wie Objekte dieser Klasse ausgegeben werden.
         Hat man z.B. in der Variable "m" eine Mitarbeiterinstanz eingespeichert, dann wird durch das 
@@ -97,6 +106,45 @@ class Mitarbeiter(UserMixin, db.Model, AbstractConcreteBase):
         übereinstimmt '''
     def check_password(self, password):
         return check_password_hash(self.passwort, password)
+
+    ''' Die folgenden drei Methoden wurden wurden aus der Flaskdokumentation entnommen (Kapitel 23: APIs). 
+        Die erste Methode ist sozusagen ein Getter (man holt sich hier den Token, genauere Beschreibung in
+        der Methode). '''
+    def get_token(self, expires_in=3600):
+        now = datetime.utcnow()
+        ''' Zu allererst wird überprüft, ob ein Token existiert und die Gültigkeitsdauer des Tokens über einer
+            Minute ist. Wenn dies der Fall ist, dann wird der Token zurückgegeben. '''
+        if self.token and self.tokenDauer > now + timedelta(seconds=60):
+            return self.token
+
+        ''' Existiert kein Token oder ist die Gültigkeitsdauer des Tokens nicht länger als 60 Sekunden (1 Minute),
+            dann wird ein neuer Token generiert. Die Dauer des Tokens wird mit dem übergebenen Parameter "expires_in"
+            spezifiziert, d.h. dass grundsätzlich die Gültigkeit des Tokens 3600 Sekunden (also eine Stunde) hält. '''
+        self.token = base64.b64encode(os.urandom(24)).decode('utf-8')
+        self.tokenDauer = now + timedelta(seconds=expires_in)
+        db.session.add(self)
+
+        return self.token
+
+    ''' Als nächstes wird in der folgenden Methode der Token des Users entzogen. Dies wird gemacht, indem man die
+        Gültigkeitsdauer des Tokens (also die Variable "tokenDauer") verfallen lässt, d.h. es wird die jetzige 
+        Zeit ermittelt ("datetime.utcnow()") und von dieser Zeit wird eine Sekunde abgezogen, welches anschließend
+        der Variable "tokenDauer" zugewiesen wird. Somit ist dann die Gültigkeit des Tokens vor einer Sekunde 
+        verfallen. '''
+    def revoke_token(self):
+        self.tokenDauer = datetime.utcnow() - timedelta(seconds=1)
+
+    ''' In der folgenden Methode wird der Token eines bestimmten Mitarbeiters überprüft. Zunächst wird überprüft,
+        ob der Mitarbeiter existiert (also ob es einen Mitarbeiter in der Datenbank gibt, der den im Parameter 
+        übergebenen Token besitzt), gefolgt von einer Überprüfung der Tokendauer (also ob der Token des Mitarbeiters
+        noch gültig ist). Trifft mindestens eines der beiden Bedingungen zu, dann wird nichts (None) zurückgegeben. 
+        Falls diese if-Abfrage jedoch nicht aufgerufen wird, so wird der bestimmte Mitarbeiter zurückgegeben. '''
+    @staticmethod
+    def check_token(token):
+        mitarbeiter = Mitarbeiter.query.filter_by(token=token).first()
+        if mitarbeiter is None or mitarbeiter.tokenDauer < datetime.utcnow():
+            return None
+        return mitarbeiter
 
 @login.user_loader
 def load_user(id):
