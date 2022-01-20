@@ -172,7 +172,7 @@ class Wartungspersonal(Mitarbeiter):
 class Zugpersonal(Mitarbeiter):
     __tablename__ = 'zugpersonal'
     berufsbezeichnung = db.Column(db.String(255), nullable=False)
-    zugNr = db.Column(db.String(255), db.ForeignKey('zug.nr'))
+    zugNr = db.Column(db.String(255), db.ForeignKey('zug.nr', onupdate="CASCADE", ondelete="SET NULL"))
     
     __mapper_args__ = { 'polymorphic_identity':'zugpersonal', 'concrete':True}
     

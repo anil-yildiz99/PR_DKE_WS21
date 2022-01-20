@@ -1,10 +1,16 @@
 from app.api import bp
-from flask import jsonify, request, url_for
-from app.models import Zug, Triebwagen
+from flask import jsonify, request, url_for, abort
+from app.models import Zug, Triebwagen, Administrator
 from app import db
 from app.api.errors import bad_request
+from app.api.auth import token_auth
+
+''' Für Testzwecke sollte bei den einzelnen API View Functions "@token_auth.login_required" 
+    auskommentiert werden, da man sonst ohne gültigem Token bzw. ohne angemeldetem User 
+    keinen Zugriff auf die API hat und dies das Testen der Funktionalitäten der API erschwert. '''
 
 @bp.route('/Züge', methods=['GET'])
+#@token_auth.login_required
 def getTrains():
     ''' Hier wird die Funktion to_collection_dict() von APIMiixin aufgerufen. Als Parameter
         nimmt dieser eine Abfrage. Hier wurde nach allen Zügen in der Datenbank abgefragt. '''
@@ -16,23 +22,33 @@ def getTrains():
     beim Safari Browser eine Googlesuche gestartet wird. Dieses Problem tritt
     beim Firefox Browser nicht auf. '''
 @bp.route('/Züge/<string:id>', methods=['GET'])
+#@token_auth.login_required
 def getTrain(id):
     return jsonify(Zug.query.get_or_404(id).to_dict())
 
 @bp.route('/Züge/<string:id>/Wartungen', methods=['GET'])
+#@token_auth.login_required
 def getMaintenancesFromTrain(id):
     zug = Zug.query.get_or_404(id)
     data = Zug.to_collection_dict(zug.wartung, 'api.getMaintenancesFromTrain', id=id)
     return jsonify(data)
 
 @bp.route('/Züge/<string:id>/Personenwaggons', methods=['GET'])
+#@token_auth.login_required
 def getPersonenwaggonsFromTrain(id):
     zug = Zug.query.get_or_404(id)
     data = Zug.to_collection_dict(zug.personenwagen, 'api.getPersonenwaggonsFromTrain', id=id)
     return jsonify(data)
 
 @bp.route('/Züge', methods=['POST'])
+@token_auth.login_required
 def createTrain():
+    ''' In dieser API View Function wird zunächst überprüft, ob es sich beim current_user, der
+        ein POST durchführen will, um einen Administrator handelt (da nur Administratoren
+        Schreibrechte haben). Ist dies nicht der Fall, dann wird der Error "403" geworfen. '''
+    if Administrator.query.filter_by(mitarbeiterNr=token_auth.current_user.mitarbeiterNr).first() is None:
+        abort(403)
+
     data = request.get_json() or {}
     if 'nr' not in data or 'name' not in data or 'triebwagen_nr' not in data:
         return bad_request('Es muss der Zugname, die Zugnummer, die Triebwagennummer und '
@@ -56,6 +72,11 @@ def createTrain():
 
 @bp.route('/Züge/<string:id>', methods=['PUT'])
 def updateTrain(id):
+    ''' Auch hier wird (wie in der API View Function "createTrain") zunächst überprüft, ob es sich
+        beim current_user um einen Administrator handelt. '''
+    if Administrator.query.filter_by(mitarbeiterNr=token_auth.current_user.mitarbeiterNr).first() is None:
+        abort(403)
+
     zug = Zug.query.get_or_404(id)
     data = request.get_json() or {}
     ''' In der folgenden Abfrage wird überprüft, ob die Zugnummer des bestimmten Zuges geändert wurde. Falls 

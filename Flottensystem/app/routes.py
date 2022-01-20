@@ -9,6 +9,9 @@ from app.forms import LoginForm, RegistrationForm, RegistrationFormZugpersonal, 
 from app.models import Mitarbeiter, Wartungspersonal, Zugpersonal, Administrator, Wagen, Triebwagen, Personenwagen, \
     Zug, Wartung
 
+''' Anmerkung zum "render_template" Ausdruck: Hier steht bei manchen View Functions "typ='Administrator'".
+    Diese Angabe wird unter anderem (aber nicht explizit) für die Navigationsleiste gebraucht, da einem Administrator
+    eine andere Navigationsleiste zur Verfügung steht als einem Mitarbeiter mit nur lesenden Rechten. '''
 
 @app.route('/')
 @app.route('/Startseite')
@@ -19,7 +22,7 @@ def home():
         else:
             next_page = url_for('home_personal')
         return redirect(next_page)
-    return render_template('home.html', title='Startseite - Flotteninformationssystem')
+    return render_template('home.html', title='Wilkommen im Flotteninformationssystem')
 
 
 @app.route('/Startseite/Admin')
@@ -28,7 +31,7 @@ def home_admin():
     if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None: # Hier wird kontrolliert, ob der angemeldete Benutzer kein Administrator ist. Ist dies der Fall, wird dieser in die Personalseite weitergeleitet (wo man auch keine Administratorrechte hat)
         flash('Sie müssen als Administrator angemeldet sein, um in die Administrator-Startseite zu gelangen!')  # Anschließend wird diese Meldung mitgegeben, um den Benutzer darüber zu informieren, warum dieser nicht auf diese Webseite zugreifen kann
         return redirect(url_for('home_personal'))
-    return render_template('home_administrator.html', title='Startseite - Flotteninformationssystem')
+    return render_template('home_user.html', title='Startseite - Flotteninformationssystem', typ='Administrator')
 
 
 @app.route('/Startseite/Personal')
@@ -37,7 +40,9 @@ def home_personal():
     if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is not None: # Falls es sich beim angemeldet User um einen Administrator handelt, wird dieser in die Administrator-Startseite weitergeleitet
         flash('Sie sind als Administrator angemeldet!')
         return redirect(url_for('home_admin'))
-    return render_template('home_personal.html', title='Startseite - Flotteninformationssystem')
+    ''' Hier muss im "render_template" Ausdruck keine Variable "typ" dazustehen, da User, die auf diese View Function zugreifen,
+        ohnehin keine Administratoren sind und dies bei der Erstellung der Navigationsleiste im Template-File berücksichtigt wird. '''
+    return render_template('home_user.html', title='Startseite - Flotteninformationssystem')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -76,13 +81,14 @@ def register():
     if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None: # Hier wird überprüft, ob ein Administrator auf diese Webseite zugreift. ist dies nicht der Fall, wird der User in die Personal-Startseite weitergeleitet
         flash('Sie müssen als Administrator angemeldet sein, um einen neuen Benutzer erstellen zu können!')
         return redirect(url_for('home_personal'))
-    return render_template('register.html', title='Benutzer erstellen')
+    return render_template('register.html', title='Benutzer erstellen', typ='Administrator')
 
 
 @app.route('/registerUser/<name>', methods=['GET', 'POST'])
 @login_required
 def registerUser(name):
-    if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None: # Hier wird überprüft, ob ein Administrator auf diese Webseite zugreift. ist dies nicht der Fall, wird der User in die Personal-Startseite weitergeleitet
+    # Zunächst wird überprüft, ob ein Administrator auf diese Webseite zugreift. ist dies nicht der Fall, wird der User in die Personal-Startseite weitergeleitet
+    if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None:
         flash('Sie müssen als Administrator angemeldet sein, um einen neuen Benutzer erstellen zu können!')
         return redirect(url_for('home_personal'))
     if name == 'Zugpersonal':   # Es wird überprüft, ob im übergebenen Parameter 'name' 'Zugpersonal' eingetragen ist. Ist dies der Fall wird ein Formular für das Zugpersonal verwendet der eine kleine Abweichung im Unterschied zu den anderen Mitarbeitern enthält
@@ -97,6 +103,7 @@ def registerUser(name):
         form.zugNr.choices = [(z.nr, z.nr) for z in Zug.query.all()]
     else:   # Ist im Parameter 'name' nicht 'Zugpersonal' eingetragen, so wird das andere Formular für die Registrierung eines Users verwendet
     	form = RegistrationForm()
+
     if form.validate_on_submit():
         if name == 'Administrator':
             user = Administrator(mitarbeiterNr=form.mitarbeiterNr.data, svnr=form.svnr.data, vorname=form.vorname.data, nachname=form.nachname.data, email=form.email.data)
@@ -104,12 +111,14 @@ def registerUser(name):
             user = Wartungspersonal(mitarbeiterNr=form.mitarbeiterNr.data, svnr=form.svnr.data, vorname=form.vorname.data, nachname=form.nachname.data, email=form.email.data)
         elif name == 'Zugpersonal':
             user = Zugpersonal(mitarbeiterNr=form.mitarbeiterNr.data, svnr=form.svnr.data, vorname=form.vorname.data, nachname=form.nachname.data, email=form.email.data, berufsbezeichnung=form.berufsbezeichnung.data, zugNr=form.zugNr.data)
+
         user.set_password(form.passwort.data)
         db.session.add(user)
         db.session.commit() # Hier werden die Daten persistiert
         flash('Benutzer wurde erfolgreich erstellt!')
         return redirect(url_for('register'))
-    return render_template('register_user.html', title=name + ' erstellen', form=form, typ=name)
+
+    return render_template('register_user.html', title=name + ' erstellen', form=form, mitarbeiterart=name, typ='Administrator')
 
 
 @app.route('/User_bearbeiten')
@@ -121,7 +130,8 @@ def updateUser():
     wartungspersonal = Wartungspersonal.query.all()
     zugpersonal = Zugpersonal.query.all()
     form = EmptyForm()
-    return render_template('user.html', wartungspersonal=wartungspersonal, zugpersonal=zugpersonal, form=form)  # Wartungs- und Zugpersonal werden auch übergeben, um diese nachfolgend auf der Webseite darzustellen
+    # Wartungs- und Zugpersonal werden auch übergeben, um diese nachfolgend auf der Webseite darzustellen
+    return render_template('user.html', title='Benutzer bearbeiten', wartungspersonal=wartungspersonal, zugpersonal=zugpersonal, form=form, typ='Administrator')
     
     
 @app.route('/User_bearbeiten/<mitarbeiterNr>', methods=['GET', 'POST'])
@@ -130,42 +140,52 @@ def editUser(mitarbeiterNr):
     if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None: # Auch hier werden User, die nicht Administrator sind, in die Personal-Startseite weitergeleitet
         flash('Sie müssen als Administrator angemeldet sein, um einen Benutzer bearbeiten zu können!')
         return redirect(url_for('home_personal'))
+
     user = Mitarbeiter.query.filter_by(mitarbeiterNr=mitarbeiterNr).first()
     if user is None:    # Wird unter der übergebenen Mitarbeiternummer kein User gefunden, so wird der Benutzer darüber informiert
         flash('Es wurde kein Mitarbeiter unter der Mitarbeiternummer {} gefunden!'.format(mitarbeiterNr))
         return redirect(url_for('updateUser'))
+
     elif type(user) == Administrator and user.mitarbeiterNr != current_user.mitarbeiterNr:  # Hier wird verhindert, dass die Daten eines anderen Administrators geändert werden
         flash('Sie dürfen die Daten eines anderen Administrators nicht bearbeiten!')
         return redirect(url_for('updateUser'))
+
     elif type(user) == Zugpersonal:
         typ = 'Zugpersonal'
         form = EditProfileFormZugpersonal(user.mitarbeiterNr, user.svnr, user.email)
         form.zugNr.choices = [(z.nr, z.nr) for z in Zug.query.all()]
+
     else:
         typ = 'Wartungspersonal'
         form = EditProfileForm(user.mitarbeiterNr, user.svnr, user.email)
+
     if form.validate_on_submit():
         user.mitarbeiterNr = form.mitarbeiterNr.data
         user.svnr = form.svnr.data
         user.vorname = form.vorname.data
         user.nachname = form.nachname.data
         user.email = form.email.data
+
         if typ == 'Zugpersonal':
             user.berufsbezeichnung = form.berufsbezeichnung.data
             user.zugNr = form.zugNr.data
+
         db.session.commit()
         flash('Änderungen wurden erfolgreich durchgeführt!')
         return redirect(url_for('updateUser'))
+
     elif request.method == 'GET':   # Ist die Abfragemethode 'GET', dann wird das Formular mit den Daten des jeweiligen Mitarbeiters angezeigt
         form.mitarbeiterNr.data = user.mitarbeiterNr
         form.svnr.data = user.svnr
         form.vorname.data = user.vorname
         form.nachname.data = user.nachname
         form.email.data = user.email
+
         if typ == 'Zugpersonal':
             form.berufsbezeichnung.data = user.berufsbezeichnung
             form.zugNr.data = user.zugNr
-    return render_template('edit_user.html', title='User bearbeiten', form=form, typ=typ)
+
+    return render_template('edit_user.html', title='User bearbeiten', form=form, typ='Administrator')
 
 @app.route('/User_löschen/<mitarbeiterNr>', methods=['POST'])
 @login_required
@@ -186,7 +206,7 @@ def deleteUser(mitarbeiterNr):
         flash('Löschen eines anderen Administrators ist nicht erlaubt!')
         return redirect(url_for('updateUser'))
 
-    form=EmptyForm()
+    form = EmptyForm()
 
     if form.validate_on_submit():
         db.session.delete(mitarbeiter)
@@ -210,7 +230,8 @@ def deleteUser(mitarbeiterNr):
         if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is not None:
             flash('Löschen des Mitarbeiters {} {} mit der Mitarbeiternummer {} wurde erfolgreich durchgeführt'.format(mitarbeiter.vorname, mitarbeiter.nachname, mitarbeiterNr))
             return redirect(url_for('updateUser'))
-        # Kann der Administrator sich selbst in der vorherigen Abfrage nicht finden, dann heißt es, dass dieser sich selbst gelöscht hat.
+        # Kann der Administrator sich selbst in der vorherigen Abfrage nicht finden, dann heißt es, dass dieser sich selbst gelöscht hat. In diesem
+        # Fall wird der User in die Loginseite weitergeleitet
         else:
             flash('Sie haben Ihr Profil erfolgreich gelöscht!')
             return redirect(url_for('login'))
@@ -249,9 +270,9 @@ def profile():  # Bei der Änderung eines Profils wird zwischen einem Administra
         form.email.data = user.email
         
     if type(user) == Administrator:
-        return render_template('profile.html', form=form, form2=form2, typ=typ)
+        return render_template('profile.html', title='Profil', form=form, form2=form2, typ=typ)
     else:
-        return render_template('profile.html', typ=typ)
+        return render_template('profile.html', title='Profil', typ=typ)
 
 
 @app.route('/Wagen_erstellen')
@@ -260,7 +281,7 @@ def waggon():
     if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None:
         flash('Sie müssen als Administrator angemeldet sein, um einen neuen Waggon erstellen zu können!')
         return redirect(url_for('home_personal'))
-    return render_template('wagen.html', title='Wagen erstellen')
+    return render_template('wagen.html', title='Wagen erstellen', typ='Administrator')
 
 
 @app.route('/Wagen_erstellen/<typ>', methods=['GET', 'POST'])
@@ -273,6 +294,7 @@ def createWaggon(typ):
         form = TriebwagenForm()
     else:
         form = PersonenwagenForm()
+
     if form.validate_on_submit():
         if typ == 'Triebwagen':
             wagen = Triebwagen(nr=form.nr.data, spurweite=form.spurweite.data, maxZugkraft=form.maxZugkraft.data)
@@ -282,7 +304,8 @@ def createWaggon(typ):
         db.session.commit()
         flash(typ + ' wurde erfolgreich erstellt!')
         return redirect(url_for('waggon'))
-    return render_template('create_waggon.html', title=typ + ' erstellen', form=form, typ=typ)
+
+    return render_template('create_waggon.html', title=typ + ' erstellen', wagenart=typ, form=form, typ='Administrator')
 
 @app.route('/Wagen_bearbeiten')
 @login_required
@@ -293,7 +316,7 @@ def updateWaggon():
     triebwagen = Triebwagen.query.all()
     personenwagen = Personenwagen.query.all()
     form = EmptyForm()
-    return render_template('edit_wagen_overview.html', title='Wagen bearbeiten', triebwagen=triebwagen, personenwagen=personenwagen, form=form)
+    return render_template('edit_wagen_overview.html', title='Wagen bearbeiten', triebwagen=triebwagen, personenwagen=personenwagen, form=form, typ='Administrator')
 
 @app.route('/Wagen_bearbeiten/<nr>', methods=['GET', 'POST'])
 @login_required
@@ -334,7 +357,7 @@ def editWaggon(nr):
             form.sitzanzahl.data = wagen.sitzanzahl
             form.maximalgewicht.data = wagen.maximalgewicht
 
-    return render_template('edit_wagen.html', title='Wagen bearbeiten', form=form, typ=typ)
+    return render_template('edit_wagen.html', title='Wagen bearbeiten', wagenart=typ, form=form, typ='Administrator')
 
 @app.route('/Wagen_löschen/<nr>', methods=['POST'])
 @login_required
@@ -378,7 +401,7 @@ def createTrain():
     triebwagen = Triebwagen.query.all()
     personenwagen = Personenwagen.query.all()
     form = ZugForm()
-    form.triebwagen_nr.choices = [(t.nr, str(t.nr) + " (Spurweite: " + str(t.spurweite) + " mm)") for t in triebwagen]
+    form.triebwagen_nr.choices = [(t.nr, str(t.nr) + " (Spurweite: " + str(t.spurweite) + " mm)") for t in Triebwagen.query.filter_by(zug=None)]
 
     if form.validate_on_submit():
         ''' Für die Erläuterung der Vorgehensweise in dieser View Function, siehe nachfolgende View Function "addMaintenance",  
@@ -417,7 +440,7 @@ def createTrain():
         flash('Zug wurde erfolgreich erstellt!')
         return redirect(url_for('createTrain'))
 
-    return render_template('create_zug.html', title='Zug erstellen', triebwagen=triebwagen, personenwagen=personenwagen, form=form)
+    return render_template('create_zug.html', title='Zug erstellen', triebwagen=triebwagen, personenwagen=personenwagen, form=form, typ='Administrator')
 
 @app.route('/Zug_bearbeiten')
 @login_required
@@ -427,7 +450,7 @@ def updateTrain():
         return redirect(url_for('home_personal'))
     zug = Zug.query.all()
     form = EmptyForm()
-    return render_template('edit_zug_overview.html', title='Zug bearbeiten', zug=zug, form=form)
+    return render_template('edit_zug_overview.html', title='Zug bearbeiten', zug=zug, form=form, typ='Administrator')
 
 ''' In dieser View Function werden nur Abweichungen von der View Function "createTrain" erklärt. Für weitere
     Erklärung, siehe View Function "createTrain". '''
@@ -445,7 +468,11 @@ def editTrain(nr):
 
     personenwagen = Personenwagen.query.all()
     form = EditZugForm(zug.nr, zug.triebwagen_nr)
-    form.triebwagen_nr.choices = [(t.nr, str(t.nr) + " (Spurweite: " + str(t.spurweite) + " mm)") for t in Triebwagen.query.all()]
+    angezeigteZuege = list(Triebwagen.query.filter_by(zug=zug))
+    for t in Triebwagen.query.filter_by(zug=None):
+        angezeigteZuege.append(t)
+
+    form.triebwagen_nr.choices = [(t.nr, str(t.nr) + " (Spurweite: " + str(t.spurweite) + " mm)") for t in angezeigteZuege]
 
     if form.validate_on_submit():
         personenwagenListe = request.form.getlist('personenwagenCheckbox')
@@ -485,7 +512,7 @@ def editTrain(nr):
         form.name.data = zug.name
         form.triebwagen_nr.data = zug.triebwagen_nr
 
-    return render_template('edit_zug.html', title='Zug bearbeiten', zug=zug, personenwagen=personenwagen, form=form)
+    return render_template('edit_zug.html', title='Zug bearbeiten', zug=zug, personenwagen=personenwagen, form=form, typ='Administrator')
 
 @app.route('/Zug_löschen/<nr>', methods=['POST'])
 @login_required
@@ -518,7 +545,6 @@ def addMaintenance():
     wartungspersonal = Wartungspersonal.query.all()
     zug = Zug.query.all()
     form = WartungForm()
-    #form.mitarbeiterNr.choices = [(w, w.vorname) for w in wartungspersonal]
     form.zugNr.choices = [(z.nr, z.nr) for z in zug]
 
     if form.validate_on_submit():
@@ -549,7 +575,8 @@ def addMaintenance():
         db.session.commit()
         flash('Die Wartung mit der Wartungsnummer {} wurde erfolgreich erstellt!'.format(wartung.wartungsNr))
         return redirect(url_for('home_admin'))
-    return render_template('create_wartung.html', title='Wartung hinzufügen', wartungspersonal=wartungspersonal, zug=zug, form=form)
+
+    return render_template('create_wartung.html', title='Wartung hinzufügen', wartungspersonal=wartungspersonal, zug=zug, form=form, typ='Administrator')
 
 @app.route('/Wartung_bearbeiten')
 @login_required
@@ -557,9 +584,10 @@ def updateMaintenance():
     if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None:
         flash('Sie müssen als Administrator angemeldet sein, um eine Wartung bearbeiten zu können!')
         return redirect(url_for('home_personal'))
+
     wartung = Wartung.query.all()
     form = EmptyForm()
-    return render_template('edit_wartung_overview.html', title='Wartung bearbeiten', wartung=wartung, form=form)
+    return render_template('edit_wartung_overview.html', title='Wartung bearbeiten', wartung=wartung, form=form, typ='Administrator')
 
 
 ''' In dieser View Function werden nur Änderungen dokumentiert. Für weitere Dokumentation des Codes in dieser View
@@ -634,7 +662,7 @@ def editMaintenance(wartungsNr):
         form.bis.data = wartung.bis
         form.zugNr.data = wartung.zugNr
 
-    return render_template('edit_wartung.html', title='Wartung bearbeiten', wartung=wartung, wartungspersonal=wartungspersonal, form=form)
+    return render_template('edit_wartung.html', title='Wartung bearbeiten', wartung=wartung, wartungspersonal=wartungspersonal, form=form, typ='Administrator')
 
 @app.route('/Wartung_löschen/<wartungsNr>', methods=['POST'])
 @login_required
@@ -659,18 +687,42 @@ def deleteMaintenance(wartungsNr):
 @app.route('/Zugübersicht')
 @login_required
 def trainOverview():
+    ''' In der nachfolgenden Zeile wird der Typ des Users herausgefunden. Je nach dem, um welche Art
+        Mitarbeiter es sich beim User handelt, wird der Dropdown der Webseite angepasst. Für die
+        Zuweisung der Variable "typ" ist es nur wichtig, ob es sich bei dem User um einen Administrator
+        handelt. Ist dies der Fall wird dieser Variable der Wert "Administrator" zugewiesen. Ist dies
+        nicht der Fall, so kann dieser Variable ein belieber Wert zugewiesen werden, da im Template-File
+        für die Dropdown-Erstellung überprüft wird, ob die übergebene Variable "typ" den Wert Administrator
+        hat oder nicht und sich dieser Dropdown nur bei einem Administrator von den anderen Usern unterscheidet. '''
+    if type(Mitarbeiter.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first()) == Administrator:
+        typ = 'Administrator'
+    else:
+        typ = 'Personal'
+
     zug = Zug.query.order_by('name').all()
-    return render_template('zug_overview.html', title='Zugübersicht', zug=zug)
+    return render_template('zug_overview.html', title='Zugübersicht', zug=zug, typ=typ)
 
 @app.route('/Waggonübersicht')
 @login_required
 def waggonOverview():
+    ''' Auch hier wird (wie in der vorherigen View Function) der Typ des Users herausgefunden. '''
+    if type(Mitarbeiter.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first()) == Administrator:
+        typ = 'Administrator'
+    else:
+        typ = 'Personal'
+
     triebwagen = Triebwagen.query.all()
     personenwagen = Personenwagen.query.all()
-    return render_template('wagen_overview.html', title='Waggonübersicht', triebwagen=triebwagen, personenwagen=personenwagen)
+    return render_template('wagen_overview.html', title='Waggonübersicht', triebwagen=triebwagen, personenwagen=personenwagen, typ=typ)
 
 @app.route('/Wartungsübersicht')
 @login_required
 def wartungOverview():
+    ''' Auch hier wird (wie in der View Function "trainOverview()") der Typ des Users herausgefunden. '''
+    if type(Mitarbeiter.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first()) == Administrator:
+        typ = 'Administrator'
+    else:
+        typ = 'Personal'
+
     wartung = Wartung.query.all()
-    return render_template('wartung_overview.html', title='Wartungsübersicht', wartung=wartung)
+    return render_template('wartung_overview.html', title='Wartungsübersicht', wartung=wartung, typ=typ)

@@ -2,11 +2,11 @@
 {% import 'bootstrap/wtf.html' as wtf %}
 
 {% block app_content %}
-    {% if typ == 'Administrator' %}
+    {% if mitarbeiterart == 'Administrator' %}
     <h2>Neuen Administrator erstellen:</h2>
-    {% elif typ == 'Wartungspersonal' %}
+    {% elif mitarbeiterart == 'Wartungspersonal' %}
     <h2>Neues Wartungspersonal erstellen:</h2>
-    {% elif typ == 'Zugpersonal' %}
+    {% elif mitarbeiterart == 'Zugpersonal' %}
     <h2>Neues Zugpersonal erstellen:</h2>
     {% endif %}
     <div class="row">

@@ -29,12 +29,16 @@
                 {{ wtf.form_field(form.triebwagen_nr) }}
                 <b>Personenwagen</b>
                 {% for p in personenwagen %}
+                    <!-- Es werden nur die Personenwaggons angezeigt, die keinem Zug zugeordnet sind. Dies
+                         wird in der folgenden Abfrage sichergestellt. -->
+                    {% if p.zugNr == None %}
                     <div class="checkbox">
                         <label>
                             <input type="checkbox" value="{{ p.nr }}" name="personenwagenCheckbox">
                             {{ p.nr }} (Spurweite: {{ p.spurweite }} mm)
                         </label>
                     </div>
+                    {% endif %}
                 {% endfor %}
                 {{ wtf.form_field(form.submit) }}
             </form>

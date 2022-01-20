@@ -7,7 +7,7 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 from config import Config
 from flask_bootstrap import Bootstrap
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, event
 
 ''' Nachfolgend wird ein MetaData Objekt hinzugefügt, um damit bei Datenbankmigrationen (flask db migrate) 
     automatisch die Namensgebung der Constraints durchzuführen, da diese sonst in den Migrationsdateien mit 
@@ -24,6 +24,9 @@ metadata = MetaData(naming_convention=convention)
 app = Flask(__name__)
 app.config.from_object(Config)
 db = SQLAlchemy(app, metadata=metadata)
+''' Als nächstes wird die Überprüfung der Foreignkeys explizit aktiviert. Diese Lösung konnte
+    durch ein Forumseintrag realisiert werden. '''
+event.listen(db.engine, 'connect', lambda c, _: c.execute('pragma foreign_keys=on'))
 migrate = Migrate(app, db, render_as_batch=True)
 login = LoginManager(app)
 login.login_view = 'login'
