@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block app_content %}
+    {% if user == [] %}
+        <p>Es sind keine Mitarbeiter vorhanden!</p>
+        <p><a>Hier</a> können Sie einen neuen Mitarbeiter erstellen</p>
+        <p><a href="{{ url_for('home_admin') }}">Zurück zur Startseite</a></p>
+    {% else %}
+        <h3>Benutzerübersicht:</h3><br>
+        {% if administrator != [] %}
+            <h4>Administratoren:</h4>
+            <table class="table table-hover">
+                <tr>
+                    <th>Mitarbeiternummer</th>
+                    <th>Sozialversicherungsnummer</th>
+                    <th>Vorname</th>
+                    <th>Nachname</th>
+                    <th>Email</th>
+                </tr>
+                {% for admin in administrator %}
+                    <tr>
+                        <td>{{ admin.mitarbeiterNr }}</td>
+                        <td>{{ admin.svnr }}</td>
+                        <td>{{ admin.vorname }}</td>
+                        <td>{{ admin.nachname }}</td>
+                        <td>{{ admin.email }}</td>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% endif %}<br>
+        {% if zugpersonal != [] %}
+            <h4>Zugpersonal:</h4>
+            <table class="table table-hover">
+                <tr>
+                    <th>Mitarbeiternummer</th>
+                    <th>Sozialversicherungsnummer</th>
+                    <th>Vorname</th>
+                    <th>Nachname</th>
+                    <th>Email</th>
+                    <th>Berufsbezeichnung</th>
+                    <th>Zugeordneter Zug</th>
+                </tr>
+                {% for z in zugpersonal %}
+                    <tr>
+                        <td>{{ z.mitarbeiterNr }}</td>
+                        <td>{{ z.svnr }}</td>
+                        <td>{{ z.vorname }}</td>
+                        <td>{{ z.nachname }}</td>
+                        <td>{{ z.email }}</td>
+                        <td>{{ z.berufsbezeichnung }}</td>
+                        {% if z.zug == None %}
+                            <td>-</td>
+                        {% else %}
+                            <td>{{ z.zug.nr }}</td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+            </table>
+        {% endif %}<br>
+        {% if wartungspersonal != [] %}
+            <h4>Wartungspersonal:</h4>
+            <table class="table table-hover">
+                <tr>
+                    <th>Mitarbeiternummer</th>
+                    <th>Sozialversicherungsnummer</th>
+                    <th>Vorname</th>
+                    <th>Nachname</th>
+                    <th>Email</th>
+                    <th>Wartungen</th>
+                </tr>
+                {% for w in wartungspersonal %}
+                    <tr>
+                        <td>{{ w.mitarbeiterNr }}</td>
+                        <td>{{ w.svnr }}</td>
+                        <td>{{ w.vorname }}</td>
+                        <td>{{ w.nachname }}</td>
+                        <td>{{ w.email }}</td>
+                        <td>
+                            {% for wartung in w.wartungen %}
+                                {% if wartung != None %}
+                                    <ul class="list-unstyled">
+                                        <li>{{ w }}</li>
+                                    </ul>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            {% endfor %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% endif %}
+    {% endif %}
+{% endblock %}

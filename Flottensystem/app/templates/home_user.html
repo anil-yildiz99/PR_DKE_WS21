@@ -30,6 +30,9 @@
         <dt>Übersichten</dt>
         <dd> <a href="{{ url_for('waggonOverview') }}">Waggonübersicht</a> </dd>
         <dd> <a href="{{ url_for('trainOverview') }}">Zugübersicht</a> </dd>
+        {% if typ == 'Administrator' %}
+        <dd> <a href="{{ url_for('userOverview') }}">Benutzerübersicht</a> </dd>
+        {% endif %}
         <dd> <a href="{{ url_for('wartungOverview') }}">Wartungsübersicht</a> </dd>
     </dl>
 {% endblock %}

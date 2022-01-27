@@ -48,7 +48,7 @@ def home_personal():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:   # Ist der Nutzer schon angemeldet, dann hat dieser keinen Zugriff auf die Login-Webseite und wird entsprechend weitergeleitet
-        if Administrator.query.filter(mitarbeiterNr=current_user.mitarbeiterNr).first() is not None:
+        if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is not None:
             return redirect(url_for('home_admin'))
         else:
             return redirect(url_for('home_personal'))
@@ -109,7 +109,7 @@ def registerUser(name):
             user = Administrator(mitarbeiterNr=form.mitarbeiterNr.data, svnr=form.svnr.data, vorname=form.vorname.data, nachname=form.nachname.data, email=form.email.data)
         elif name == 'Wartungspersonal':
             user = Wartungspersonal(mitarbeiterNr=form.mitarbeiterNr.data, svnr=form.svnr.data, vorname=form.vorname.data, nachname=form.nachname.data, email=form.email.data)
-        elif name == 'Zugpersonal':
+        else:
             user = Zugpersonal(mitarbeiterNr=form.mitarbeiterNr.data, svnr=form.svnr.data, vorname=form.vorname.data, nachname=form.nachname.data, email=form.email.data, berufsbezeichnung=form.berufsbezeichnung.data, zugNr=form.zugNr.data)
 
         user.set_password(form.passwort.data)
@@ -214,6 +214,7 @@ def deleteUser(mitarbeiterNr):
             handelt. Ist dies der Fall, dann werden alle Wartungen von diesem Wartungspersonalmitarbeiter überprüft (falls welche vorhanden sind) '''
         if type(mitarbeiter) == Wartungspersonal:
             wartungen = mitarbeiter.wartungen.all()
+            flash(wartungen)
             if wartungen is not None:
                 ''' In diesen Wartungen von dem gelöschten Wartungspersonalmitarbeiter wird überprüft, ob noch Mitarbeiter vorhanden sind. Falls 
                     nicht, dann wird die Wartung ebenfalls gelöscht, da einer Wartung Wartungspersonalmitarbeiter zugeteilt sein müssen. Dies 
@@ -401,6 +402,12 @@ def createTrain():
     triebwagen = Triebwagen.query.all()
     personenwagen = Personenwagen.query.all()
     form = ZugForm()
+    ''' Als nächstes wird die "choices" Variable (welches eine Liste ist; für weitere Erklärung dieser Variable, siehe "forms.py" im Formular
+        "RegistrationFormZugPersonal") des SelectFields "triebwagen_nr" "aufgefüllt". Hier wird geachtet, dass diesem SelectField nur die
+        Triebwaggons zugewiesen werden, die keinem Zug zugeteilt wurden. Diese Einschränkung dient dazu, dass der User nicht unnötige
+        Triebwaggons sieht bzw. auswählt, welche er ohnehin nicht auswählen kann/darf. Die "triebwagen_nr" Variable vom Formular bekommt
+        dann die jeweilige Nummer des Triebwaggons zugewiesen. Der User sieht im SelectField zusätzlich zur Triebwagennummer noch 
+        die Spurweite des jeweiligen Triebwaggons. '''
     form.triebwagen_nr.choices = [(t.nr, str(t.nr) + " (Spurweite: " + str(t.spurweite) + " mm)") for t in Triebwagen.query.filter_by(zug=None)]
 
     if form.validate_on_submit():
@@ -468,6 +475,15 @@ def editTrain(nr):
 
     personenwagen = Personenwagen.query.all()
     form = EditZugForm(zug.nr, zug.triebwagen_nr)
+    ''' Hier wird folgende Vorgehensweise augeführt: Man will, dass beim bearbeiten eines bestimmten Zuges im SelectField zunächst 
+        der dem Zug zugewiesene Triebwagen angezeigt wird und danach die Triebwaggons, die noch keinem Zug zugeordnet sind. Dies
+        wird in den nachfolgenden Zeilen realisiert. Es wird zunächst der Triebwagen ausgewählt, der dem Zug zugeordnet ist, welchen
+        man gerade bearbeiten möchte. Es muss beachtet werden, dass dieser Triebwagen in eine Liste eingesetzt wird, indem es durch
+        den Ausdruck "list(...)" in eine Liste umgewandelt wird. Wenn man diesen "list(...)" Ausdruck weglassen würde, dann würde 
+        die Variable "angezeigteZuege" eine Instanz vom Typ Triebwagen bekommen und man könnte dies somit nicht in die "choices" 
+        Variable im SelectField einsetzen. Innerhalb der nachfolgenden for-Schleife werden dann durch die Methode "append" (welches 
+        eine Methode von Python ist, um einer Liste ein neues Element hinzuzufügen) die übrigen Triebwaggons, welche noch keinem 
+        Zug zugeordnet sind, angefügt. '''
     angezeigteZuege = list(Triebwagen.query.filter_by(zug=zug))
     for t in Triebwagen.query.filter_by(zug=None):
         angezeigteZuege.append(t)
@@ -497,8 +513,8 @@ def editTrain(nr):
                 flash('Die Spurweiten der ausgewählten Waggons stimmen nicht überein! Bitte wählen Sie Waggons mit einer einheitlichen Spurweite aus.')
                 return redirect(url_for('editTrain', nr=nr))
 
-        ''' Hier ist es wichtig, die nachfolgende Zuweisung der Zugnummer nach der ersten for-Schleife zu setzen, denn sonst wäre
-            die if-Bedingung in der for-Schleife immer True. '''
+        ''' Hier ist es wichtig, die nachfolgende Zuweisung der Zugnummer nach der ersten for-Schleife ("for liste in personenwagenListe:") 
+            zu setzen, denn sonst wäre die if-Bedingung in dieser for-Schleife immer True. '''
         zug.nr = form.nr.data
         zug.name = form.name.data
         zug.triebwagen_nr = form.triebwagen_nr.data
@@ -604,7 +620,7 @@ def editMaintenance(wartungsNr):
         return redirect(url_for('updateMaintenance'))
 
     wartungspersonal = Wartungspersonal.query.all()
-    form = EditWartungForm(wartung.wartungsNr)
+    form = EditWartungForm(wartung.wartungsNr, wartung.zugNr)
     form.zugNr.choices = [(z.nr, z.nr) for z in Zug.query.all()]
 
     if form.validate_on_submit():
@@ -726,3 +742,22 @@ def wartungOverview():
 
     wartung = Wartung.query.all()
     return render_template('wartung_overview.html', title='Wartungsübersicht', wartung=wartung, typ=typ)
+
+''' Dies ist eine für den Administrator zusätzlich erstellte View Function. Hier hat der Administrator die Möglichkeit,
+    alle Mitarbeiter des Unternehmens einzusehen (bzw. alle Mitarbeiter, die einen Useraccount im Flotteninformationssystem
+    haben). Diese Seite wird bewusst nur den Administratoren zur Verfügung gestellt, da es nicht erlaubt sein soll, dass
+    ein "normaler" Mitarbeiter mit nur Leserechten die Daten von allen anderen Mitarbeitern einsehen kann. Außerdem ist
+    diese Seite für normale Mitarbeiter nicht notwendig, da diese damit nichts anfangen können (für einen Administrator
+    ist diese Seite von Vorteil, da dieser eine bessere Übersicht über die Mitarbeiter hat und dadurch auch leichter
+    Fehler bei den Mitarbeiterdaten finden kann). '''
+@app.route('/Benutzerübersicht')
+@login_required
+def userOverview():
+    if Administrator.query.filter_by(mitarbeiterNr=current_user.mitarbeiterNr).first() is None:
+        flash('Sie müssen als Administrator angemeldet sein, um eine Übersicht über die User erhalten zu können!')
+        return redirect(url_for('home_personal'))
+
+    administrator = Administrator.query.all()
+    zugpersonal = Zugpersonal.query.all()
+    wartungspersonal = Wartungspersonal.query.all()
+    return render_template('user_overview.html', title='Wartungsübersicht', administrator=administrator, zugpersonal=zugpersonal, wartungspersonal=wartungspersonal, typ='Administrator')

@@ -198,6 +198,11 @@ class Wagen(APIMixin, db.Model, AbstractConcreteBase):
 class Triebwagen(Wagen):
     __tablename__ = 'triebwagen'
     maxZugkraft = db.Column(db.Integer, nullable=False)
+    ''' Durch "uselist=False" wird die "1 zu 1"-Assoziation zwischen Triebwaggons und Zügen sichergestellt.
+        D.h. dass man hier der Variable "zug" nur ein Wert zuweisen kann (und nicht eine Liste von Werten,
+        wie es ursprünglich der Fall ist). Das Setzen von False in der "uselist" Variable führt zu einer
+        weiteren Einschränkung: Hat die Variable "zug" einen Wert bereits zugewiesen bekommen und man fügt
+        diesem noch einen Wert hinzu, dann wird der alte Wert überschrieben. '''
     zug = db.relationship('Zug', backref='triebwagen', uselist=False, cascade='all, delete-orphan')
     
     __mapper_args__ = { 'polymorphic_identity':'triebwagen', 'concrete':True}
@@ -311,5 +316,9 @@ class Wartung(APIMixin, db.Model):
             if field in data:
                 setattr(self, field, data[field])
 
-
+''' Der nachfolgende Ausdruck wird bei normaler Klassenvererbung (z.B. ConcreteBase) automatisch generiert. Da in unserem 
+    Fall "AbstractConcreteBase" für die Klassenvererbung angewandt wird, ist eine explizite Angabe notwendig, womit dann 
+    durch alle konfigurierten Subklassen gescannt und das mapping (welches eine Abfrage aller Subklassen auf einmal ermöglicht)
+    eingerichtet wird. Dies ermöglicht dann eine Abfrage über alle Subklassen hinweg (also man kann dann bei der abstrakten 
+    Base-Klasse Abfragen durchführen und dieser führt dann anschließend eine Abfrage über all seine Subklassen hinweg). '''
 configure_mappers()

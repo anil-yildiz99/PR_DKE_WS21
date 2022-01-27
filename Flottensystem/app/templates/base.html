@@ -1,7 +1,7 @@
 {% extends 'bootstrap/base.html' %}
 {% block title %}
     {% if title %}
-    {{ title }}
+        {{ title }}
     {% else %}
         Wilkommen im Flotteninformationssystem
     {% endif %}
@@ -46,6 +46,7 @@
                             <ul class="dropdown-menu">
                                 <li><a href="{{ url_for('register') }}">Neuen Benutzer erstellen</a></li>
                                 <li><a href="{{ url_for('updateUser') }}">Bestehende Benutzer bearbeiten/löschen</a></li>
+                                <li><a href="{{ url_for('userOverview') }}">Benutzerübersicht</a></li>
                             </ul>
                         </li>
                         <li class="dropdown">

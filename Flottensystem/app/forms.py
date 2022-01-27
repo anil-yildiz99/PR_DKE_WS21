@@ -1,5 +1,4 @@
 import datetime
-
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, \
     SelectField, DateTimeField, SelectMultipleField, widgets
@@ -358,7 +357,6 @@ class WartungForm(FlaskForm):
         eingegeben werden müssen '''
     von = DateTimeField('Von (Format: "dd.mm.YYYY HH:MM")', format='%d.%m.%Y %H:%M', validators=[DataRequired()])
     bis = DateTimeField('Bis (Format: "dd.mm.YYYY HH:MM")', format='%d.%m.%Y %H:%M', validators=[DataRequired()])
-    #mitarbeiterNr = SelectMultipleField('Wartungspersonal', validators=[DataRequired()])
     zugNr = SelectField('Zugnummer', validators=[DataRequired()])
     submit = SubmitField('Erstellen')
 
@@ -385,12 +383,26 @@ class WartungForm(FlaskForm):
             in Sekunden umgewandelt wurde, kürzer als 1800 Sekunden (also eine halbe Stunde) ist '''
         if (self.bis.data - von.data).total_seconds() < 1800:
             raise ValidationError('Eine Wartung dauert mindestens 30 Minuten!')
+        ''' Weiters wird angenommen, dass eine Wartung höchstens 8 Stunden (28.800 Sekunden) dauert, da des
+            weiteren angenommen wird, dass ein Arbeitstag 8 Stunden beträgt. Wird diese 8 Stunden Grenze
+            überschritten, so wird ein Fehler ausgegeben. '''
+        if (self.bis.data - von.data).total_seconds() > 28800:
+            raise ValidationError('Eine Wartung darf nicht länger als 8 Stunden dauern!')
+
+        ''' Als nächstes werden die einzelnen Wartungen von dem ausgewählten Zug ermittelt. Anschließend wird dann
+            abgefragt, ob es zwischen den einzelnen Wartungen und dem eingetragenem Zeitraum eine Überschneidung
+            gibt. Falls dies der Fall ist, wird ein Fehler ausgegeben '''
+        zug = Zug.query.filter_by(nr=self.zugNr.data).first()
+        for w in zug.wartung.all():
+            if w.von <= von.data <= w.bis:
+                raise ValidationError('Zu diesem Zeitraum befindet sich der Zug schon in einer Wartung! Bitte wählen Sie einen anderen Zeitraum aus')
+
 
 
     def validate_bis(self, bis):
         ''' Hierbei handelt es sich um eine ähnliche Abfrage wie in "validate_von", nur dass hier überprüft wird,
         ob der Endzeitpunkt der Wartung vor dem Beginnzeitpunkt der Wartung erfolgt. Auch hier wird ein Fehler
-        ausgegeben, falls die Abfrage True ist '''
+        ausgegeben, falls die Abfrage True ist. '''
         if bis.data < self.von.data:
             raise ValidationError('Das Ende der Wartung muss nach dem Beginn dieser erfolgen!')
         ''' Die folgenden zwei Abfragen sind auch fast identisch wie in "validate_von" '''
@@ -398,6 +410,15 @@ class WartungForm(FlaskForm):
             raise ValidationError('Beginn und Ende einer Wartung darf nicht gleich sein!')
         if (bis.data - self.von.data).total_seconds() < 1800:
             raise ValidationError('Eine Wartung dauert mindestens 30 Minuten!')
+        if (bis.data - self.von.data).total_seconds() > 28800:
+            raise ValidationError('Eine Wartung darf nicht länger als 8 Stunden dauern!')
+
+        ''' Genauso wie in "validate_von" wird hier auch ermittelt, ob es eine Überschneidung des Wartungszeitraums
+            des ausgewählten Zuges gibt. '''
+        zug = Zug.query.filter_by(nr=self.zugNr.data).first()
+        for w in zug.wartung.all():
+            if w.von <= bis.data <= w.bis:
+                raise ValidationError('Zu diesem Zeitraum befindet sich der Zug schon in einer Wartung! Bitte wählen Sie einen anderen Zeitraum aus')
 
 class EditWartungForm(FlaskForm):
     wartungsNr = StringField('Wartungsnummer', validators=[DataRequired()])
@@ -406,9 +427,10 @@ class EditWartungForm(FlaskForm):
     zugNr = SelectField('Zugnummer', validators=[DataRequired()])
     submit = SubmitField('Erstellen')
 
-    def __init__(self, original_nr, *args, **kwargs):
+    def __init__(self, original_nr, original_zugNr, *args, **kwargs):
         super(EditWartungForm, self).__init__(*args, **kwargs)
         self.original_nr = original_nr
+        self.original_zugNr = original_zugNr
 
     def validate_wartungsNr(self, wartungsNr):
         for character in wartungsNr.data:
@@ -419,10 +441,56 @@ class EditWartungForm(FlaskForm):
             if wartung is not None:
                 raise ValidationError('Diese Wartungsnummer ist bereits vergeben! Bitte geben sie eine andere Wartungsnummer ein.')
 
+
     def validate_von(self, von):
         if von.data > self.bis.data:
             raise ValidationError('Der Beginn einer Wartung kann nicht nach dem Ende dieser erfolgen!')
+        if von.data == self.bis.data:
+            raise ValidationError('Beginn und Ende einer Wartung darf nicht gleich sein!')
+        if (self.bis.data - von.data).total_seconds() < 1800:
+            raise ValidationError('Eine Wartung dauert mindestens 30 Minuten!')
+        if (self.bis.data - von.data).total_seconds() > 28800:
+            raise ValidationError('Eine Wartung darf nicht länger als 8 Stunden dauern!')
+
+        zug = Zug.query.filter_by(nr=self.zugNr.data).first()
+        ''' Falls der Zug, bei dem die Wartung durchgeführt wird, geändert wird, dann sind die nächsten Schritte innerhalb der
+            Abfrage genau dieselben wie im normalen Zugformular. '''
+        if self.zugNr.data != self.original_zugNr:
+            for w in zug.wartung.all():
+                if w.von <= von.data <= w.bis:
+                    raise ValidationError('Zu diesem Zeitraum befindet sich der Zug schon in einer Wartung! Bitte wählen Sie einen anderen Zeitraum aus')
+        else:
+            ''' Innerhalb der folgenden Schleife wird zunächst abgefragt, ob es sich bei der jeweiligen Wartungsnummer um die original 
+                definierte Wartungsnummer (hier wird die original definierte Wartungsnummer "original_nr" genommen, da es sein kann, 
+                dass auch "self.wartungsNr" sich geändert hat) handelt. Falls dies der Fall ist, dann wird die Wartung (mittels continue 
+                statement) übersprungen und es wird folglich nichts darüber abgefragt, da es nicht notwendig ist, von der eigenen Wartung 
+                den Wartungszeitraum abzufragen. '''
+            for w in zug.wartung.all():
+                if w.wartungsNr == self.original_nr:
+                    continue
+                if w.von <= von.data <= w.bis:
+                    raise ValidationError('Zu diesem Zeitraum befindet sich der Zug schon in einer Wartung! Bitte wählen Sie einen anderen Zeitraum aus')
 
     def validate_bis(self, bis):
         if bis.data < self.von.data:
             raise ValidationError('Das Ende der Wartung muss nach dem Beginn dieser erfolgen!')
+        if bis.data == self.von.data:
+            raise ValidationError('Beginn und Ende einer Wartung darf nicht gleich sein!')
+        if (bis.data - self.von.data).total_seconds() < 1800:
+            raise ValidationError('Eine Wartung dauert mindestens 30 Minuten!')
+        if (bis.data - self.von.data).total_seconds() > 28800:
+            raise ValidationError('Eine Wartung darf nicht länger als 8 Stunden dauern!')
+
+        ''' Für den folgenden Code wird auf die vorherige Validierungsmethode "validate_von" verwiesen, da dies hier analog abläuft nur
+            mit dem Unterschied, dass diesmal "bis" überprüft wird. '''
+        zug = Zug.query.filter_by(nr=self.zugNr.data).first()
+        if self.zugNr.data != self.original_zugNr:
+            for w in zug.wartung.all():
+                if w.von <= bis.data <= w.bis:
+                    raise ValidationError('Zu diesem Zeitraum befindet sich der Zug schon in einer Wartung! Bitte wählen Sie einen anderen Zeitraum aus')
+        else:
+            for w in zug.wartung.all():
+                if w.wartungsNr == self.original_nr:
+                    continue
+                if w.von <= bis.data <= w.bis:
+                    raise ValidationError('Zu diesem Zeitraum befindet sich der Zug schon in einer Wartung! Bitte wählen Sie einen anderen Zeitraum aus')
